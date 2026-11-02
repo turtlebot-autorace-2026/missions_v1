@@ -1,0 +1,26 @@
+# Doubles MUST keep a decimal point (ROS 2 rejects 1 for a double).
+mission_fsm:
+  ros__parameters:
+    left_topic: /left            # sign detector topics (std_msgs/Bool, True = sign confirmed)
+    right_topic: /right
+    odom_topic: /odom
+    rate_hz: 10.0
+    status_period: 1.0
+    start_mode: go               # go = drive immediately (traffic light start: later)
+    confirm_count: 1             # the detector already confirms over several frames
+    confirm_window: 1.0
+    left_line: yellow            # line followed into the left branch  -> verify in Gazebo
+    right_line: white            # line followed into the right branch -> verify in Gazebo
+    branch_hold_m: 0.9           # initial value: tune in Gazebo
+    branch_timeout_s: 20.0
+    intersection_once: true
+
+cmd_vel_mux:
+  ros__parameters:
+    lane_topic: /cmd_vel_lane
+    mission_topic: /cmd_vel_mission
+    mode_topic: /mission/drive
+    out_topic: cmd_vel
+    source_timeout: 0.5
+    mode_timeout: 1.0
+    tick_hz: 20.0
