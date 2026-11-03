@@ -1,7 +1,8 @@
 # Doubles MUST keep a decimal point (ROS 2 rejects 1 for a double).
 mission_fsm:
   ros__parameters:
-    left_topic: /left            # sign detector topics (std_msgs/Bool, True = sign confirmed)
+    arm_topic: /intersection     # INTERSECTION (triangle) sign, std_msgs/Bool
+    left_topic: /left            # direction signs, std_msgs/Bool, True on every confirmed frame
     right_topic: /right
     odom_topic: /odom
     rate_hz: 10.0
@@ -9,10 +10,13 @@ mission_fsm:
     start_mode: go               # go = drive immediately (traffic light start: later)
     confirm_count: 1             # the detector already confirms over several frames
     confirm_window: 1.0
-    left_line: yellow            # line followed into the left branch  -> verify in Gazebo
-    right_line: white            # line followed into the right branch -> verify in Gazebo
-    branch_hold_m: 0.9           # initial value: tune in Gazebo
-    branch_timeout_s: 20.0
+    require_arm: true            # left/right only after the INTERSECTION sign
+    arm_timeout_m: 4.0           # m driven while armed without left/right -> disarm (spawn -> fork ~2.9 m)
+    slow_when_armed: false
+    left_line: yellow            # left branch: outer yellow arc (course texture)
+    right_line: white            # right branch: outer white arc (course texture)
+    branch_hold_m: 1.0           # m after the LAST sighting of the chosen sign; initial value, tune in Gazebo
+    branch_timeout_s: 30.0
     intersection_once: true
 
 cmd_vel_mux:

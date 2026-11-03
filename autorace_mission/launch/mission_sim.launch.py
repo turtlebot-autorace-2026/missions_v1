@@ -2,7 +2,9 @@
 
 Terminal 1: ros2 launch autorace_gazebo autorace.launch.py referee:=false
 Terminal 2: ros2 launch autorace_mission mission_sim.launch.py
-Signs (until the detector exists): ros2 topic pub --once /left std_msgs/msg/Bool "{data: true}"
+Signs (until the detector exists): first the INTERSECTION sign, then the direction
+  ros2 topic pub --once /intersection std_msgs/msg/Bool "{data: true}"
+  ros2 topic pub -r 5 /left std_msgs/msg/Bool "{data: true}"   # Ctrl+C at the fork (= last sighting)
 
 The lane node publishes /cmd_vel_lane (not cmd_vel) and waits for /lane_state from the FSM.
 """
@@ -25,6 +27,7 @@ def generate_launch_description():
         DeclareLaunchArgument('mission_params', default_value=os.path.join(share, 'config', 'mission_params.yaml')),
         DeclareLaunchArgument('v_max', default_value='0.12'),
         DeclareLaunchArgument('show', default_value='true'),
+        DeclareLaunchArgument('arm_topic', default_value='/intersection'),
         DeclareLaunchArgument('left_topic', default_value='/left'),
         DeclareLaunchArgument('right_topic', default_value='/right'),
         Node(
@@ -49,6 +52,7 @@ def generate_launch_description():
             package='autorace_mission', executable='mission_fsm', name='mission_fsm', output='screen',
             parameters=[arg('mission_params'), {
                 'use_sim_time': True,
+                'arm_topic': arg('arm_topic'),
                 'left_topic': arg('left_topic'),
                 'right_topic': arg('right_topic'),
             }],

@@ -1,7 +1,10 @@
 '''
 mission_fsm node: the only place that decides what the robot is doing.
 
-  sub  <left_topic>, <right_topic>   std_msgs/Bool   sign detector (True = sign confirmed)
+  sub  <arm_topic>                   std_msgs/Bool   INTERSECTION (triangle) sign, arms left/right
+  sub  <left_topic>, <right_topic>   std_msgs/Bool   direction signs. Detector should send True on
+                                                     every frame the sign is confirmed (the branch
+                                                     hold counts from the last True)
   sub  <odom_topic>                  nav_msgs/Odometry
   pub  /lane_state                   std_msgs/Bool   lane node on/off
   pub  /lane/follow_line             std_msgs/String both | yellow | white
@@ -22,6 +25,7 @@ class MissionFsmNode(Node):
     def __init__(self):
         super().__init__('mission_fsm')
         p = self.declare_parameter
+        p('arm_topic', '/intersection')
         p('left_topic', '/left')
         p('right_topic', '/right')
         p('odom_topic', '/odom')
@@ -31,7 +35,9 @@ class MissionFsmNode(Node):
             p(k, v)
         self.fsm = MissionFSM(**{k: self.get_parameter(k).value for k in DEFAULTS})
 
+        arm = self.get_parameter('arm_topic').value
         left, right = self.get_parameter('left_topic').value, self.get_parameter('right_topic').value
+        self.create_subscription(Bool, arm, lambda m: self.fsm.on_sign('intersection', m.data, self.now()), 10)
         self.create_subscription(Bool, left, lambda m: self.fsm.on_sign('left', m.data, self.now()), 10)
         self.create_subscription(Bool, right, lambda m: self.fsm.on_sign('right', m.data, self.now()), 10)
         self.create_subscription(Odometry, self.get_parameter('odom_topic').value, self.on_odom, 10)
@@ -46,7 +52,7 @@ class MissionFsmNode(Node):
         self.last_status_t = -1e9
         self.status_period = self.get_parameter('status_period').value
         self.create_timer(1.0 / self.get_parameter('rate_hz').value, self.tick)
-        self.get_logger().info('mission_fsm: signs %s / %s, params %s' % (left, right, self.fsm.p))
+        self.get_logger().info('mission_fsm: arm %s, signs %s / %s, params %s' % (arm, left, right, self.fsm.p))
 
     def now(self):
         return self.get_clock().now().nanoseconds * 1e-9

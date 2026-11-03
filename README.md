@@ -5,7 +5,7 @@ TurtleBot3 AutoRace 2026. 지금 들어 있는 것은 **출발 + 교차로**뿐�
 ## 구조
 
 ```text
-표지판 인식 노드 ── /left /right (Bool) ──▶ mission_fsm ── /lane_state, /lane/follow_line, /intersection_state ──▶ lane_detection_ad
+표지판 인식 노드 ── /intersection /left /right (Bool) ──▶ mission_fsm ── /lane_state, /lane/follow_line, /intersection_state ──▶ lane_detection_ad
                                               │
                                               └── /mission/drive (lane|mission|stop) ──▶ cmd_vel_mux
 lane_detection_ad ── /cmd_vel_lane ──────────────────────────────────────────────────▶ cmd_vel_mux ──▶ cmd_vel
@@ -19,21 +19,29 @@ mission_fsm 직접 기동(주차·터널, 아직 없음) ── /cmd_vel_mission
 
 ## 교차로 동작
 
-1. `/left` 또는 `/right`에 `True`가 오면 (`confirm_count`개, `confirm_window`초 안) 분기 결정
-2. 왼쪽 → `left_line`(기본 노란선)만, 오른쪽 → `right_line`(기본 흰선)만 따라간다. 속도는 `v_max_intersection`
-3. 결정 지점부터 오도메트리로 `branch_hold_m`(기본 0.9 m)를 달리면 다시 양쪽 선으로. 안전용 시간 제한 `branch_timeout_s`
-4. 교차로는 한 번만 (`intersection_once`). `False` 메시지는 무시. 왼쪽·오른쪽이 같은 창 안에 둘 다 오면 무시
+```text
+LANE ── /intersection(세모 표지판) ──▶ ARMED ── /left 또는 /right ──▶ BRANCH (한쪽 선만, 감속)
+ ▲   (이때 left/right는 무시)          │ arm_timeout_m(4 m) 동안 방향 없음      │
+ └─────────────────────────────────────┘                                        │
+ └──── 마지막으로 그 표지판을 본 지점부터 branch_hold_m(1.0 m) ◀────────────────┘
+```
+
+1. **좌/우 표지판은 INTERSECTION(세모) 표지판을 본 뒤에만 받는다** (`require_arm`). 이 맵은 교차로 섬이 출발 직선에서 약 1.2 m 옆이라, 출발 근처에서 좌/우가 잡히면 엉뚱한 곳에서 분기하고 진짜 교차로를 무시하게 된다. 그걸 막는 장치다.
+2. 방향은 처음 확인된 것으로 고정 (분기 중 반대쪽 오검출로 뒤집히지 않음). 같은 창 안에 좌·우가 둘 다 오면 무시
+3. 왼쪽 → `left_line`(노란선)만, 오른쪽 → `right_line`(흰선)만. 맵 텍스처로 확인: 왼쪽 분기의 바깥선은 노란 호, 오른쪽 분기의 바깥선은 흰 호 (심판 영역 `branch_left`/`branch_right`와도 일치)
+4. 양쪽 선으로 돌아오는 시점: **그 표지판을 마지막으로 본 지점부터** `branch_hold_m`. 좌/우 표지판은 섬(갈림길)에 서 있으므로, 멀리서 일찍 봤든 아니든 마지막 목격 ≈ 갈림길이다. 그래서 인식 노드는 **확인된 동안 매 프레임 `True`**를 보내야 한다 (한 번만 보내면 첫 목격 지점부터 세게 됨)
+5. 교차로는 한 번만 (`intersection_once`). 세모 표지판 뒤 4 m 안에 방향 표지판이 없으면 해제하고 다시 기다린다 (교차로를 쓴 걸로 치지 않음)
 
 **Gazebo에서 확인할 것** (지금 값은 추정):
 
-- 왼쪽 분기에서 노란선, 오른쪽 분기에서 흰선을 따라가는 게 맞는지. 반대면 `left_line`/`right_line`만 바꾼다
-- `branch_hold_m`: 분기를 다 돌아 양쪽 선이 다시 정상으로 보이는 지점까지의 거리
-- 표지판 인식 노드가 몇 m 앞에서 `True`를 내는지 (멀리서 내면 `branch_hold_m`를 그만큼 늘려야 함)
+- 섬을 따라 돌 때 한쪽 선만 따라가다 섬의 같은 색 선(섬 왼쪽 아래는 노란색, 위는 흰색)으로 옮겨 타지 않는지
+- `branch_hold_m`: 갈림길부터 두 분기가 다시 합쳐지는 지점까지 (텍스처 기준 약 1.0 m)
+- 출발 지점에서 세모 표지판이 비스듬히(약 1.7 m, 29° 왼쪽) 잡힐 수 있다. 그러면 출발부터 ARMED가 되는데, 갈림길까지 약 2.9 m라 `arm_timeout_m` 4 m 안이다
 
 ## 필요한 것
 
 - `lane_detection_ad` **이 커밋 이후 버전** (`/lane/follow_line`, 반복 `/lane_state` 무시)
-- 표지판 인식 노드: `/left`, `/right` `std_msgs/Bool`, 여러 프레임 확인 후 `True`. 토픽 이름이 바뀌면 launch 인자로 맞춘다
+- 표지판 인식 노드: `/intersection`(세모), `/left`, `/right` `std_msgs/Bool`. 여러 프레임 확인 후, 보이는 동안 매 프레임 `True`. 토픽 이름이 바뀌면 launch 인자(`arm_topic:=`, `left_topic:=`, `right_topic:=`)로 맞춘다
 
 ## 빌드
 
@@ -53,16 +61,16 @@ source ~/autorace_ad_ws/install/setup.bash
 ros2 launch autorace_gazebo autorace.launch.py referee:=false
 # 터미널 2 (바로 차선 주행 시작)
 ros2 launch autorace_mission mission_sim.launch.py
-# 표지판 노드가 없을 때: 교차로 섬 앞에 왔을 때 손으로
-ros2 topic pub --once /left std_msgs/msg/Bool "{data: true}"
-ros2 topic pub --once /right std_msgs/msg/Bool "{data: true}"
+# 표지판 노드가 없을 때 손으로: 세모 표지판 지날 때 arm, 섬 앞에서 방향 (갈림길에서 Ctrl+C = 마지막 목격)
+ros2 topic pub --once /intersection std_msgs/msg/Bool "{data: true}"
+ros2 topic pub -r 5 /left std_msgs/msg/Bool "{data: true}"
 # 상태 보기
 ros2 topic echo /mission/state
 ```
 
-인자: `left_topic:=`, `right_topic:=`, `v_max:=`, `show:=false`, `mission_params:=<yaml>`, `lane_params:=<yaml>`.
+인자: `arm_topic:=`, `left_topic:=`, `right_topic:=`, `v_max:=`, `show:=false`, `mission_params:=<yaml>`, `lane_params:=<yaml>`.
 
-로그에서 볼 것: `sign left -> INTERSECTION, follow yellow`, 차선 로그의 `[auto follow=yellow]`, `branch left done (0.90 m, ...) -> LANE`.
+로그에서 볼 것: `INTERSECTION sign -> ARMED`, `sign left -> BRANCH, follow yellow`, 차선 로그의 `[auto follow=yellow]`, `branch left done (1.00 m after last sighting, ...) -> LANE`. 세모 전에 좌/우가 오면 `left/right seen before the INTERSECTION sign -> ignored`.
 
 ## 테스트 (ROS 없이)
 
